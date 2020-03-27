@@ -32,7 +32,7 @@ const (
 	defaultRegion            = "cn-hangzhou"
 	defaultInstanceType      = "ecs.n4.small"
 	defaultRootSize          = 20
-	internetChargeType       = string(common.PayByTraffic)
+	internetChargeType       = string(common.PayByBandwidth)
 	ipRange                  = "0.0.0.0/0"
 	machineSecurityGroupName = "rancher-machine"
 	vpcCidrBlock             = "10.0.0.0/8"
@@ -182,7 +182,7 @@ func (d *Driver) GetCreateFlags() []mcnflag.Flag {
 		},
 		mcnflag.StringFlag{
 			Name:   "aliyunecs-internet-charge-type",
-			Usage:  "Internet charge type, the valid values are PayByTraffic (default) or PayByBandwidth",
+			Usage:  "Internet charge type, the valid values are PayByBandwidth (default) or PayByTraffic",
 			Value:  internetChargeType,
 			EnvVar: "ECS_INTERNET_CHARGE_TYPE",
 		},
