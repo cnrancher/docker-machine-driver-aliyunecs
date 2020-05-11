@@ -78,7 +78,6 @@ type Driver struct {
 	DiskFS                  string
 	DiskCategory            ecs.DiskCategory
 	Description             string
-	IoOptimized             bool
 	APIEndpoint             string
 	SystemDiskCategory      ecs.DiskCategory
 	SystemDiskSize          int
@@ -292,7 +291,6 @@ func (d *Driver) GetImageID(image string) string {
 	}
 
 	//Use default image
-
 	image = defaultUbuntuImageID
 
 	return image
@@ -338,25 +336,10 @@ func (d *Driver) SetConfigFromFlags(flags drivers.DriverOptions) error {
 	d.DiskFS = flags.String("aliyunecs-disk-fs")
 	d.DiskCategory = ecs.DiskCategory(flags.String("aliyunecs-disk-category"))
 	tags := flags.StringSlice("aliyunecs-tag")
-	//upgradeKernel := false //flags.Bool("aliyunecs-upgrade-kernel")
-	//if upgradeKernel {
-	//	log.Warnf("%s | The --aliyunecs-upgrade-kernel is deprecated. Please use the Ubuntu 16.04 as the OS image for ECS instance", d.MachineName)
-	//}
 
-	ioOptimized := strings.ToLower(flags.String("aliyunecs-io-optimized"))
-
-	d.IoOptimized = (ioOptimized == "true" || ioOptimized == "optimized")
 	d.Description = flags.String("aliyunecs-description")
 	d.SystemDiskCategory = ecs.DiskCategory(flags.String("aliyunecs-system-disk-category"))
 	d.SystemDiskSize = flags.Int("aliyunecs-system-disk-size")
-
-	if d.SystemDiskCategory == "" && d.IoOptimized {
-		d.SystemDiskCategory = ecs.DiskCategoryCloudSSD
-	}
-
-	if d.DiskCategory == "" && d.IoOptimized {
-		d.DiskCategory = ecs.DiskCategoryCloudSSD
-	}
 
 	tagMap := make(map[string]string)
 	if len(tags) > 0 {
@@ -492,11 +475,6 @@ func (d *Driver) Create() error {
 	imageID := d.GetImageID(d.ImageID)
 	log.Infof("%s | Creating instance with image %s ...", d.MachineName, imageID)
 
-	ioOptimized := ecs.IoOptimizedNone
-	if d.IoOptimized {
-		ioOptimized = ecs.IoOptimizedOptimized
-	}
-
 	args := ecs.CreateInstanceArgs{
 		RegionId:                d.Region,
 		InstanceName:            d.GetMachineName(),
@@ -509,7 +487,6 @@ func (d *Driver) Create() error {
 		KeyPairName:             d.SSHKeyPairName,
 		VSwitchId:               VSwitchId,
 		ZoneId:                  d.Zone,
-		IoOptimized:             ioOptimized,
 		InternetMaxBandwidthOut: d.InternetMaxBandwidthOut,
 		ClientToken:             d.getClient().GenerateClientToken(),
 	}
