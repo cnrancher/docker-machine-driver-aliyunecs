@@ -1,23 +1,36 @@
 ---
-pipeline:
-  build:
-    privileged: true
-    image: rancher/dapper:1.11.2
-    volumes:
-    - /var/run/docker.sock:/var/run/docker.sock
-    commands:
-    - dapper ci
+kind: pipeline
 
-  github-binary-publish-release:
-    image: plugins/github-release
+steps:
+- name: build
+  privileged: true
+  image: rancher/dapper:1.11.2
+  volumes:
+  - name: docker
+    path: /var/run/docker.sock
+  commands:
+  - dapper ci
+
+- name: github-binary-publish-release
+  image: plugins/github-release
+  settings:
+    api_key:
+      from_secret: github_token
+    checksum:
+    - sha256
     files:
     - "dist/*"
-    checksum:
-     - sha256
-    secrets: [github_token]
-    when:
-      ref:
-      - refs/head/master
-      - refs/tags/*      
-      event: 
-      - tag
+  when:
+    ref:
+    - refs/head/master
+    - refs/tags/*
+    event:
+    - tag
+
+volumes:
+- name: docker
+  host:
+    path: /var/run/docker.sock
+
+node:
+  instance: agent-amd64
