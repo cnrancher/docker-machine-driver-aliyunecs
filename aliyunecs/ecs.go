@@ -81,6 +81,7 @@ type Driver struct {
 	APIEndpoint             string
 	SystemDiskCategory      ecs.DiskCategory
 	SystemDiskSize          int
+	ResourceGroupId         string
 
 	client    *ecs.Client
 	slbClient *slb.Client
@@ -246,6 +247,12 @@ func (d *Driver) GetCreateFlags() []mcnflag.Flag {
 			Value:  "",
 			EnvVar: "ECS_API_ENDPOINT",
 		},
+		mcnflag.StringFlag{
+			Name:   "aliyunecs-resource-group-id",
+			Usage:  "Custom resource group id",
+			Value:  "",
+			EnvVar: "RESOURCE_GROUP_ID",
+		},
 	}
 }
 
@@ -340,6 +347,7 @@ func (d *Driver) SetConfigFromFlags(flags drivers.DriverOptions) error {
 	d.Description = flags.String("aliyunecs-description")
 	d.SystemDiskCategory = ecs.DiskCategory(flags.String("aliyunecs-system-disk-category"))
 	d.SystemDiskSize = flags.Int("aliyunecs-system-disk-size")
+	d.ResourceGroupId = flags.String("aliyunecs-resource-group-id")
 
 	tagMap := make(map[string]string)
 	if len(tags) > 0 {
