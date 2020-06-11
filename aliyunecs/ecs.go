@@ -4,20 +4,18 @@ import (
 	"crypto/md5"
 	"crypto/rand"
 	"fmt"
-	mrand "math/rand"
-
-	"github.com/denverdino/aliyungo/common"
-	"github.com/denverdino/aliyungo/ecs"
-	"github.com/denverdino/aliyungo/slb"
-
 	"io"
 	"io/ioutil"
+	mrand "math/rand"
 	"net"
 	"net/url"
 	"strconv"
 	"strings"
 	"time"
 
+	"github.com/denverdino/aliyungo/common"
+	"github.com/denverdino/aliyungo/ecs"
+	"github.com/denverdino/aliyungo/slb"
 	"github.com/docker/machine/libmachine/drivers"
 	"github.com/docker/machine/libmachine/log"
 	"github.com/docker/machine/libmachine/mcnflag"
@@ -38,6 +36,8 @@ const (
 	vpcCidrBlock             = "10.0.0.0/8"
 	vSwitchCidrBlock         = "10.1.0.0/24"
 	timeout                  = 300
+	sshTimeout               = 60
+	defaultInterval          = 5
 	defaultSSHUser           = "root"
 	maxRetry                 = 20
 )
@@ -566,7 +566,9 @@ func (d *Driver) Create() error {
 
 					ssh.SetDefaultClient(ssh.Native)
 
-					d.configECSInstance(imageID)
+					if configInstanceErr := d.configECSInstance(imageID); configInstanceErr != nil {
+						return configInstanceErr
+					}
 
 					log.Infof("%s | Created instance %s successfully with public IP address %s and private IP address %s",
 						d.MachineName,
@@ -1324,8 +1326,6 @@ func (d *Driver) configECSInstance(imageId string) error {
 
 	log.Infof("%s | Waiting SSH service %s is ready to connect ...", d.MachineName, tcpAddr)
 
-	log.Infof("%s | Uploading SSH keypair to %s ...", d.MachineName, tcpAddr)
-
 	var auth *ssh.Auth
 
 	if d.SSHPrivateKeyPath == "" {
@@ -1338,13 +1338,33 @@ func (d *Driver) configECSInstance(imageId string) error {
 		}
 	}
 
-	sshClient, err := ssh.NewClient(d.GetSSHUsername(), ipAddr, port, auth)
-
+	sshConfig, err := ssh.NewNativeConfig(d.GetSSHUsername(), auth)
 	if err != nil {
 		return err
 	}
+	sshConfig.Timeout = sshTimeout * time.Second
+
+	sshClient := &ssh.NativeClient{
+		Config:   sshConfig,
+		Hostname: ipAddr,
+		Port:     port,
+	}
+
+	if retriesExceededErr := mcnutils.WaitForSpecificOrError(func() (bool, error) {
+		err = sshClient.Shell("exit")
+		return err == nil, err
+	}, maxRetry, defaultInterval*time.Second); retriesExceededErr != nil {
+		if removeErr := mcnutils.WaitForSpecificOrError(func() (bool, error) {
+			err = d.Remove()
+			return err == nil, err
+		}, maxRetry, defaultInterval*time.Second); removeErr != nil {
+			return fmt.Errorf("%s | Unable to init and failed to delete instance %s(%s): %s", d.MachineName, d.InstanceId, d.IPAddress, removeErr.Error())
+		}
+		return fmt.Errorf("%s | Unable to init instance: %s(%s)", d.MachineName, d.InstanceId, d.IPAddress)
+	}
 
 	if d.SSHKeyPairName == "" {
+		log.Infof("%s | Uploading SSH keypair to %s ...", d.MachineName, tcpAddr)
 		err = d.uploadKeyPair(sshClient)
 		if err != nil {
 			return err
