@@ -378,10 +378,6 @@ func (d *Driver) SetConfigFromFlags(flags drivers.DriverOptions) error {
 		return fmt.Errorf("%s | aliyunecs driver --aliyunecs-internet-max-bandwidth: The value should be in 1 ~ 100", d.MachineName)
 	}
 
-	if d.InternetMaxBandwidthOut == 0 {
-		d.InternetMaxBandwidthOut = 1
-	}
-
 	if d.InternetChargeType != common.PayByTraffic && d.InternetChargeType != common.PayByBandwidth {
 		return fmt.Errorf("Unsupported internet charge type: %s", d.InternetChargeType)
 	}
