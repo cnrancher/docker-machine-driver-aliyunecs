@@ -374,8 +374,12 @@ func (d *Driver) SetConfigFromFlags(flags drivers.DriverOptions) error {
 		}
 	}
 
-	if d.InternetMaxBandwidthOut < 0 || d.InternetMaxBandwidthOut > 100 {
-		return fmt.Errorf("%s | aliyunecs driver --aliyunecs-internet-max-bandwidth: The value should be in 1 ~ 100", d.MachineName)
+	if d.InternetMaxBandwidthOut < 0 || d.InternetMaxBandwidthOut > 200 {
+		return fmt.Errorf("%s | aliyunecs driver --aliyunecs-internet-max-bandwidth: The value should be in 1 ~ 200", d.MachineName)
+	}
+
+	if !d.PrivateIPOnly && d.InternetMaxBandwidthOut == 0 {
+		d.InternetMaxBandwidthOut = 1
 	}
 
 	if d.InternetChargeType != common.PayByTraffic && d.InternetChargeType != common.PayByBandwidth {
@@ -480,19 +484,18 @@ func (d *Driver) Create() error {
 	log.Infof("%s | Creating instance with image %s ...", d.MachineName, imageID)
 
 	args := ecs.CreateInstanceArgs{
-		RegionId:                d.Region,
-		InstanceName:            d.GetMachineName(),
-		Description:             d.Description,
-		ImageId:                 imageID,
-		InstanceType:            d.InstanceType,
-		SecurityGroupId:         d.SecurityGroupId,
-		InternetChargeType:      d.InternetChargeType,
-		Password:                d.SSHPassword,
-		KeyPairName:             d.SSHKeyPairName,
-		VSwitchId:               VSwitchId,
-		ZoneId:                  d.Zone,
-		InternetMaxBandwidthOut: d.InternetMaxBandwidthOut,
-		ClientToken:             d.getClient().GenerateClientToken(),
+		RegionId:           d.Region,
+		InstanceName:       d.GetMachineName(),
+		Description:        d.Description,
+		ImageId:            imageID,
+		InstanceType:       d.InstanceType,
+		SecurityGroupId:    d.SecurityGroupId,
+		InternetChargeType: d.InternetChargeType,
+		Password:           d.SSHPassword,
+		KeyPairName:        d.SSHKeyPairName,
+		VSwitchId:          VSwitchId,
+		ZoneId:             d.Zone,
+		ClientToken:        d.getClient().GenerateClientToken(),
 	}
 
 	if d.SystemDiskCategory != "" {
