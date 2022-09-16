@@ -153,7 +153,8 @@ func TestConfigureSecurityGroupPermissionsEmpty(t *testing.T) {
 		SecurityGroupId:   "12345",
 		VpcId:             "12345",
 	}
-	perms := d.configureSecurityGroupPermissions(&securityGroup)
+	var openPort []string
+	perms := d.configureSecurityGroupPermissions(&securityGroup, openPort)
 	t.Logf("Permissions: %v", perms)
 	if len(perms) != 5 {
 		t.Fatalf("expected 5 permissions; received %d", len(perms))

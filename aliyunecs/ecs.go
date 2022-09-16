@@ -89,6 +89,7 @@ type Driver struct {
 	SpotStrategy       ecs.SpotStrategyType
 	SpotPriceLimit     string
 	SpotDuration       int
+	OpenPorts          []string
 
 	client    *ecs.Client
 	slbClient *slb.Client
@@ -297,6 +298,12 @@ func (d *Driver) GetCreateFlags() []mcnflag.Flag {
 			Value:  "",
 			EnvVar: "SPOT_PRICELIMIT",
 		},
+		mcnflag.StringSliceFlag{
+			Name:   "aliyunecs-open-port",
+			Usage:  "Make the specified port number accessible from the Internet",
+			Value:  []string{},
+			EnvVar: "ECS_OPEN_PORT",
+		},
 	}
 }
 
@@ -399,6 +406,7 @@ func (d *Driver) SetConfigFromFlags(flags drivers.DriverOptions) error {
 	d.SpotStrategy = ecs.SpotStrategyType(flags.String("aliyunecs-spot-strategy"))
 	d.SpotPriceLimit = flags.String("aliyunecs-spot-price-limit")
 	d.SpotDuration = flags.Int("aliyunecs-spot-duration")
+	d.OpenPorts = flags.StringSlice("aliyunecs-open-port")
 
 	tagMap := make(map[string]string)
 	if len(tags) > 0 {
@@ -530,7 +538,7 @@ func (d *Driver) Create() error {
 	}
 
 	log.Infof("%s | Configuring security groups instance ...", d.MachineName)
-	if err := d.configureSecurityGroup(VpcId, d.SecurityGroupName); err != nil {
+	if err := d.configureSecurityGroup(VpcId, d.SecurityGroupName, d.OpenPorts); err != nil {
 		return err
 	}
 
@@ -1125,7 +1133,7 @@ func (d *Driver) securityGroupAvailableFunc(id string) func() bool {
 	}
 }
 
-func (d *Driver) configureSecurityGroup(vpcId string, groupName string) error {
+func (d *Driver) configureSecurityGroup(vpcId string, groupName string, openPort []string) error {
 	log.Debugf("%s | Configuring security group in %s", d.MachineName, d.VpcId)
 
 	var securityGroup *ecs.DescribeSecurityGroupAttributeResponse
@@ -1183,6 +1191,7 @@ func (d *Driver) configureSecurityGroup(vpcId string, groupName string) error {
 			return err
 		}
 		securityGroup, err = d.getSecurityGroup(groupId)
+
 		if err != nil {
 			return err
 		}
@@ -1190,7 +1199,7 @@ func (d *Driver) configureSecurityGroup(vpcId string, groupName string) error {
 
 	d.SecurityGroupId = securityGroup.SecurityGroupId
 
-	perms := d.configureSecurityGroupPermissions(securityGroup)
+	perms := d.configureSecurityGroupPermissions(securityGroup, openPort)
 
 	for _, permission := range perms {
 		log.Debugf("%s | Authorizing group %s with permission: %v", d.MachineName, securityGroup.SecurityGroupName, permission)
@@ -1231,7 +1240,7 @@ func (p *IpPermission) createAuthorizeSecurityGroupArgs(regionId common.Region, 
 	return &args
 }
 
-func (d *Driver) configureSecurityGroupPermissions(group *ecs.DescribeSecurityGroupAttributeResponse) []IpPermission {
+func (d *Driver) configureSecurityGroupPermissions(group *ecs.DescribeSecurityGroupAttributeResponse, openPort []string) []IpPermission {
 	hasSSHPort := false
 	hasDockerPort := false
 	for _, p := range group.Permissions.Permission {
@@ -1248,7 +1257,6 @@ func (d *Driver) configureSecurityGroupPermissions(group *ecs.DescribeSecurityGr
 	}
 
 	perms := []IpPermission{}
-
 	if !hasSSHPort {
 		perms = append(perms, IpPermission{
 			IpProtocol: ecs.IpProtocolTCP,
@@ -1267,76 +1275,90 @@ func (d *Driver) configureSecurityGroupPermissions(group *ecs.DescribeSecurityGr
 		})
 	}
 
-	//80
-	perms = append(perms, IpPermission{
-		IpProtocol: ecs.IpProtocolTCP,
-		FromPort:   80,
-		ToPort:     80,
-		IpRange:    ipRange,
-	})
+	// If a security group is passed in that needs to be opened, the value passed in is used, if not it is created by default
+	if len(openPort) > 0 {
+		for _, p := range openPort {
+			port, protocol := SplitPortProto(p)
+			log.Infof("Add sgp port %v protocol %v", port, protocol)
+			perms = append(perms, IpPermission{
+				IpProtocol: ecs.IpProtocol(protocol),
+				FromPort:   port,
+				ToPort:     port,
+				IpRange:    ipRange,
+			})
+		}
+	} else {
+		//80
+		perms = append(perms, IpPermission{
+			IpProtocol: ecs.IpProtocolTCP,
+			FromPort:   80,
+			ToPort:     80,
+			IpRange:    ipRange,
+		})
 
-	//443
-	perms = append(perms, IpPermission{
-		IpProtocol: ecs.IpProtocolTCP,
-		FromPort:   443,
-		ToPort:     443,
-		IpRange:    ipRange,
-	})
+		//443
+		perms = append(perms, IpPermission{
+			IpProtocol: ecs.IpProtocolTCP,
+			FromPort:   443,
+			ToPort:     443,
+			IpRange:    ipRange,
+		})
 
-	//ICMP
-	perms = append(perms, IpPermission{
-		IpProtocol: ecs.IpProtocolICMP,
-		FromPort:   -1,
-		ToPort:     -1,
-		IpRange:    ipRange,
-	})
+		//ICMP
+		perms = append(perms, IpPermission{
+			IpProtocol: ecs.IpProtocolICMP,
+			FromPort:   -1,
+			ToPort:     -1,
+			IpRange:    ipRange,
+		})
 
-	//rke begin
-	//apiserver
-	perms = append(perms, IpPermission{
-		IpProtocol: ecs.IpProtocolTCP,
-		FromPort:   6443,
-		ToPort:     6443,
-		IpRange:    ipRange,
-	})
+		//rke begin
+		//apiserver
+		perms = append(perms, IpPermission{
+			IpProtocol: ecs.IpProtocolTCP,
+			FromPort:   6443,
+			ToPort:     6443,
+			IpRange:    ipRange,
+		})
 
-	//etcd
-	perms = append(perms, IpPermission{
-		IpProtocol: ecs.IpProtocolTCP,
-		FromPort:   2379,
-		ToPort:     2380,
-		IpRange:    ipRange,
-	})
+		//etcd
+		perms = append(perms, IpPermission{
+			IpProtocol: ecs.IpProtocolTCP,
+			FromPort:   2379,
+			ToPort:     2380,
+			IpRange:    ipRange,
+		})
 
-	//kubelet ScedulerPort ControllerPort
-	perms = append(perms, IpPermission{
-		IpProtocol: ecs.IpProtocolTCP,
-		FromPort:   10250,
-		ToPort:     10252,
-		IpRange:    ipRange,
-	})
+		//kubelet ScedulerPort ControllerPort
+		perms = append(perms, IpPermission{
+			IpProtocol: ecs.IpProtocolTCP,
+			FromPort:   10250,
+			ToPort:     10252,
+			IpRange:    ipRange,
+		})
 
-	//KubeProxyPort
-	perms = append(perms, IpPermission{
-		IpProtocol: ecs.IpProtocolTCP,
-		FromPort:   10256,
-		ToPort:     10256,
-		IpRange:    ipRange,
-	})
+		//KubeProxyPort
+		perms = append(perms, IpPermission{
+			IpProtocol: ecs.IpProtocolTCP,
+			FromPort:   10256,
+			ToPort:     10256,
+			IpRange:    ipRange,
+		})
 
-	perms = append(perms, IpPermission{
-		IpProtocol: ecs.IpProtocolUDP,
-		FromPort:   4789,
-		ToPort:     4789,
-		IpRange:    ipRange,
-	})
+		perms = append(perms, IpPermission{
+			IpProtocol: ecs.IpProtocolUDP,
+			FromPort:   4789,
+			ToPort:     4789,
+			IpRange:    ipRange,
+		})
 
-	perms = append(perms, IpPermission{
-		IpProtocol: ecs.IpProtocolUDP,
-		FromPort:   8472,
-		ToPort:     8472,
-		IpRange:    ipRange,
-	})
+		perms = append(perms, IpPermission{
+			IpProtocol: ecs.IpProtocolUDP,
+			FromPort:   8472,
+			ToPort:     8472,
+			IpRange:    ipRange,
+		})
+	}
 
 	//rke end
 	//如果是容器网段的话，需要设置容器网段开放安全组

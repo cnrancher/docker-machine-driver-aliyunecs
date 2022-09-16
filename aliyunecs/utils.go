@@ -3,6 +3,7 @@ package aliyunecs
 import (
 	"crypto/rand"
 	"errors"
+	"strconv"
 	"strings"
 
 	"github.com/denverdino/aliyungo/common"
@@ -58,4 +59,17 @@ func randomPassword() string {
 
 func isUbuntuImage(image string) bool {
 	return strings.HasPrefix(image, "ubuntu")
+}
+
+func SplitPortProto(raw string) (port int, protocol string) {
+	parts := strings.SplitN(raw, "/", 2)
+	out, err := strconv.Atoi(parts[0])
+	if err != nil {
+		return 22, "tcp"
+	}
+	if len(parts) == 1 {
+		return out, "tcp"
+	}
+
+	return out, parts[1]
 }
