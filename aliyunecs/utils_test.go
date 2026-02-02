@@ -3,7 +3,6 @@ package aliyunecs
 import "testing"
 
 func TestIsUbuntuImage(t *testing.T) {
-
 	if !isUbuntuImage("ubuntu_160401_64_40G_cloudinit_20161115.vhd") {
 		t.Errorf("Failed to check ubuntu image - ubuntu 16.04")
 	}

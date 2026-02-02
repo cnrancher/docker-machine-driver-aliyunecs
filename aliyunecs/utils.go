@@ -1,12 +1,18 @@
 package aliyunecs
 
 import (
+	"crypto/md5"
 	"crypto/rand"
 	"errors"
+	"fmt"
+	"io"
 	mrand "math/rand"
+	"net"
 	"strconv"
 	"strings"
 	"time"
+
+	"github.com/rancher/machine/libmachine/log"
 )
 
 var (
@@ -17,8 +23,8 @@ var (
 	errComplete       = errors.New("Complete")
 )
 
-const defaultUbuntuImageID = "ubuntu_16_0402_64_20G_alibase_20171227.vhd"
-const defaultUbuntuImagePrefix = "ubuntu_16_0402_64"
+const defaultUbuntuImageID = "ubuntu_22_04_x64_20G_alibase_20240807.vhd"
+const defaultUbuntuImagePrefix = "ubuntu_22_04_x64"
 
 func validateECSRegion(region string) (Region, error) {
 	for _, v := range validRegions {
@@ -37,12 +43,11 @@ const dictionary = digitals + alphabet + specialChars
 const tokenDictionary = "_0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz"
 const paswordLen = 16
 
-func randomPassword() string {
+func RandomPassword() string {
 	var bytes = make([]byte, paswordLen)
 	rand.Read(bytes)
 	for k, v := range bytes {
 		var ch byte
-
 		switch k {
 		case 0:
 			ch = alphabet[v%byte(len(alphabet))]
@@ -113,9 +118,7 @@ var validRegions = []Region{
 func CreateRandomString() string {
 	b := make([]byte, 32)
 	l := len(tokenDictionary)
-
 	_, err := rand.Read(b)
-
 	if err != nil {
 		// fail back to insecure rand
 		mrand.Seed(time.Now().UnixNano())
@@ -127,6 +130,27 @@ func CreateRandomString() string {
 			b[i] = dictionary[v%byte(l)]
 		}
 	}
-
 	return string(b)
+}
+
+func GetContainerCIDR(cidrBlock string) (string, error) {
+	ip, _, err := net.ParseCIDR(cidrBlock)
+	if err != nil {
+		return "", err
+	}
+	ip = ip.To4()
+	ip[2] = 0
+	ip[3] = 0
+	return fmt.Sprintf("%s/16", ip.String()), nil
+}
+
+func generateId() string {
+	rb := make([]byte, 10)
+	_, err := rand.Read(rb)
+	if err != nil {
+		log.Errorf("Unable to generate id: %s", err)
+	}
+	h := md5.New()
+	io.WriteString(h, string(rb))
+	return fmt.Sprintf("%x", h.Sum(nil))
 }
