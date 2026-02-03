@@ -10,6 +10,7 @@ on:
 
 permissions:
   contents: write
+  actions: read
 
 jobs:
   build:
@@ -66,10 +67,29 @@ jobs:
     runs-on: ubuntu-22.04
     if: startsWith(github.ref, 'refs/tags/')
     steps:
-      - name: Download all build artifacts
-        uses: actions/download-artifact@v4
-        with:
-          path: ./release-assets
+      - name: Checkout
+        uses: actions/checkout@v4
+      - name: List artifacts for this run
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh --version
+          gh api repos/${{ github.repository }}/actions/runs/${{ github.run_id }}/artifacts \
+            --jq '.artifacts[] | "\(.id)\t\(.name)\t\(.size_in_bytes)"'
+      - name: Download all build artifacts (via gh)
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          mkdir -p ./release-assets
+          for a in \
+            build-output-linux-amd64 \
+            build-output-linux-arm64 \
+            build-output-darwin-amd64 \
+            build-output-darwin-arm64 \
+            build-output-windows-amd64; do
+            echo "Downloading $a"
+            gh run download ${{ github.run_id }} -R ${{ github.repository }} -n "$a" -D ./release-assets
+          done
 
       - name: Flatten files
         run: |
