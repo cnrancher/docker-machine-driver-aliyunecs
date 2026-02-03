@@ -4,9 +4,9 @@ on:
   push:
     branches:
       - main
-      - "release/v*.**"
+      - "release/v*.*"
     tags:
-      - 'v*.*.*'
+      - "v*.*.*"
 
 permissions:
   contents: write
@@ -14,66 +14,72 @@ permissions:
 jobs:
   build:
     runs-on: ubuntu-22.04
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - goos: linux
+            goarch: amd64
+          - goos: linux
+            goarch: arm64
+          - goos: darwin
+            goarch: amd64
+          - goos: darwin
+            goarch: arm64
+          - goos: windows
+            goarch: amd64
+
     steps:
       - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Set up Go 1.19
-        uses: actions/setup-go@v5
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Build ${{ matrix.goos }}-${{ matrix.goarch }} and export artifacts
+        uses: docker/build-push-action@v6
         with:
-          go-version: '1.19'
+          context: .
+          file: Dockerfile
+          target: artifact
+          push: false
+          build-args: |
+            GOOS=${{ matrix.goos }}
+            GOARCH=${{ matrix.goarch }}
+            DRIVER_NAME=docker-machine-driver-aliyunecs
+          outputs: type=local,dest=./output/${{ matrix.goos }}-${{ matrix.goarch }}
 
-      - name: Run Go Mod Tidy
+      - name: Show output
         run: |
-          go mod tidy
+          find ./output/${{ matrix.goos }}-${{ matrix.goarch }} -maxdepth 3 -type f -print
+          ls -la ./output/${{ matrix.goos }}-${{ matrix.goarch }}/out/bin || true
 
-      - name: Run Build
-        env:
-          REPO: ${{ github.repository }}
-          TAG: ${{ github.ref_name }}
-          DRONE_TAG: ${{ github.ref_name }}
-        run: |
-          ./scripts/entry ci
-
-      - name: Debug Output
-        run: |
-          ls -la dist || echo "dist folder not found"
-          ls -la bin || echo "bin folder not found"
-
-      - name: Upload Artifacts
+      - name: Upload artifacts (per-platform)
         uses: actions/upload-artifact@v4
         with:
-          name: build-output
+          name: build-output-${{ matrix.goos }}-${{ matrix.goarch }}
           path: |
-            dist/
-            bin/
+            output/${{ matrix.goos }}-${{ matrix.goarch }}/out/bin/*.tgz
 
   release:
     needs: build
     runs-on: ubuntu-22.04
     if: startsWith(github.ref, 'refs/tags/')
     steps:
-      - name: Checkout
-        uses: actions/checkout@v4
-
-      - name: Download Artifacts
+      - name: Download all build artifacts
         uses: actions/download-artifact@v4
         with:
-          name: build-output
-          path: ./output
+          path: ./release-assets
 
-      - name: Prepare Release Files
+      - name: Flatten files
         run: |
-          mkdir -p dist bin
-          mv output/dist/* dist/ || echo "No dist files found"
-          mv output/bin/* bin/ || echo "No bin files found"
-          ls -la dist
-          ls -la bin
+          mkdir -p ./dist
+          find ./release-assets -type f -maxdepth 5 -print -exec cp -v {} ./dist/ \;
+          ls -la ./dist
 
       - name: Create Release
         uses: softprops/action-gh-release@v2
         with:
           files: |
             dist/*
-            bin/*
           generate_release_notes: true
