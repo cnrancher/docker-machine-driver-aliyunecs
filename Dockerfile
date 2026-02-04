@@ -22,11 +22,12 @@ RUN --mount=type=cache,target=/go/pkg/mod \
     ext=""; \
     if [ "${GOOS}" = "windows" ]; then ext=".exe"; fi; \
     arch="${GOOS}-${GOARCH}"; \
-    bin="/out/bin/${DRIVER_NAME}-${arch}${ext}"; \
-    echo "Building ${bin}"; \
-    CGO_ENABLED=0 GOOS="${GOOS}" GOARCH="${GOARCH}" go build -trimpath -ldflags "-s -w" -o "${bin}" ./; \
-    tar czvf "/out/bin/${DRIVER_NAME}-${arch}.tgz" -C "/out/bin" "$(basename "${bin}")"
+    bin="/out/bin/${DRIVER_NAME}${ext}"; \
+    echo "Building ${bin} (GOOS=${GOOS} GOARCH=${GOARCH})"; \
+    CGO_ENABLED=0 GOOS="${GOOS}" GOARCH="${GOARCH}" \
+      go build -trimpath -ldflags "-s -w" -o "${bin}" ./; \
+    tar czvf "/out/bin/${DRIVER_NAME}-${arch}.tgz" -C "/out/bin" "$(basename "${bin}")"; \
+    rm -f "${bin}"
 
 FROM scratch AS artifact
 COPY --from=builder /out/ /out/
-
