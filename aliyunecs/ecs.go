@@ -506,6 +506,19 @@ func (d *Driver) Create() error {
 	// 设置 instance ID
 	d.InstanceId = instanceId
 	log.Infof("%s | Create instance %s successfully", d.MachineName, d.InstanceId)
+
+	cleanupNeeded := true
+	// 如果有错误需要删除对应的 instance 和 eip
+	defer func(id string) {
+		if !cleanupNeeded {
+			return
+		}
+		// 防止 d.InstanceId 有变动，重新用闭包拿下
+		d.InstanceId = id
+		if err := d.Remove(); err != nil {
+			log.Infof("%s | Cleanup network for %s failed: %v", d.MachineName, d.InstanceId, err)
+		}
+	}(instanceId)
 	// 等待 ECS 成功创建
 	if err := d.waitForInstance(d.InstanceId, stopped, timeout); err != nil {
 		return fmt.Errorf("%s | Failed to wait instance to 'stopped': %v", d.MachineName, err)
@@ -518,6 +531,7 @@ func (d *Driver) Create() error {
 	if err := d.startAndConfigureInstance(imageID, timeout); err != nil {
 		return err
 	}
+	cleanupNeeded = false
 	// 如果设置 Tag 为 ECS 添加
 	if len(d.Tags) > 0 {
 		log.Infof("%s | Adding tags %v to instance %s ...", d.MachineName, d.Tags, d.InstanceId)
