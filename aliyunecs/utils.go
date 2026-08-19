@@ -12,6 +12,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/alibabacloud-go/tea/tea"
 	"github.com/rancher/machine/libmachine/log"
 )
 
@@ -65,6 +66,28 @@ func RandomPassword() string {
 
 func isUbuntuImage(image string) bool {
 	return strings.HasPrefix(image, "ubuntu")
+}
+
+// isInstanceNotFound reports whether err means the ECS instance no longer exists.
+// Treat this as successful removal so rancher-machine delete jobs do not retry forever.
+func isInstanceNotFound(err error) bool {
+	if err == nil {
+		return false
+	}
+	var se *tea.SDKError
+	if errors.As(err, &se) {
+		code := tea.StringValue(se.Code)
+		if code == "InvalidInstanceId.NotFound" || code == "InvalidInstance.NotFound" {
+			return true
+		}
+		if se.StatusCode != nil && *se.StatusCode == 404 {
+			return true
+		}
+	}
+	msg := err.Error()
+	return strings.Contains(msg, "InvalidInstanceId.NotFound") ||
+		strings.Contains(msg, "InvalidInstance.NotFound") ||
+		strings.Contains(msg, "StatusCode: 404")
 }
 
 func SplitPortProto(raw string) (port int, protocol string, err error) {

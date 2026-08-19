@@ -169,7 +169,11 @@ func (d *Driver) deleteInstance() error {
 	}
 	runtime := &util.RuntimeOptions{}
 	if _, err := cli.DeleteInstanceWithOptions(req, runtime); err != nil {
-		return fmt.Errorf("%s | delete instance %s: %v", d.MachineName, d.InstanceId, err)
+		if isInstanceNotFound(err) {
+			log.Infof("%s | Instance %s already gone while deleting, treat as success", d.MachineName, d.InstanceId)
+			return nil
+		}
+		return fmt.Errorf("%s | delete instance %s: %w", d.MachineName, d.InstanceId, err)
 	}
 	return nil
 }
@@ -201,7 +205,7 @@ func (d *Driver) getInstance() (*ecs20140526.DescribeInstanceAttributeResponseBo
 	runtime := &util.RuntimeOptions{}
 	resp, err := cli.DescribeInstanceAttributeWithOptions(req, runtime)
 	if err != nil {
-		return nil, fmt.Errorf("%s | describe instance attribute error: %v", d.MachineName, err)
+		return nil, fmt.Errorf("%s | describe instance attribute error: %w", d.MachineName, err)
 	}
 	if resp == nil || resp.Body == nil {
 		return nil, fmt.Errorf("%s | describe instance attribute returned empty response", d.MachineName)

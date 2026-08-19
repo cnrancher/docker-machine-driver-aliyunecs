@@ -581,6 +581,15 @@ func (d *Driver) Remove() error {
 	}
 	instance, err := d.getInstance()
 	if err != nil {
+		// Instance already deleted in cloud: treat Remove as success so Rancher delete Job finishes.
+		if isInstanceNotFound(err) {
+			log.Infof("%s | Instance %s not found, treat remove as success", d.MachineName, d.InstanceId)
+			d.InstanceId = ""
+			d.IPAddress = ""
+			d.PrivateIPAddress = ""
+			d.Zone = ""
+			return nil
+		}
 		return fmt.Errorf("%s | Unable to describe the instance %s: %w", d.MachineName, d.InstanceId, err)
 	}
 	instanceId := tea.StringValue(instance.InstanceId)
